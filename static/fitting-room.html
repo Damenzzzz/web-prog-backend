@@ -32,6 +32,25 @@
       <p id="room-message" class="message"></p>
     </section>
 
+    <section id="tryon-block" class="section narrow" hidden>
+      <div class="panel">
+        <h2>AI-примерка</h2>
+        <p class="muted">Отметьте галочкой до трёх вещей разных категорий и нажмите «Примерить». Генерация может занять до минуты.</p>
+        <div class="actions">
+          <button id="tryon-button" class="btn" type="button">Примерить</button>
+          <span id="tryon-spinner" class="spinner" hidden></span>
+        </div>
+        <p id="tryon-message" class="message"></p>
+        <img id="tryon-result" class="tryon-image" alt="Результат примерки" hidden>
+      </div>
+    </section>
+
+    <section class="section narrow">
+      <h2>История примерок</h2>
+      <div id="tryons" class="grid tryons"></div>
+      <p id="tryons-message" class="message"></p>
+    </section>
+
     <section class="section narrow">
       <h2>Мои заказы</h2>
       <div id="orders" class="rows"></div>

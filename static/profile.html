@@ -25,7 +25,7 @@
     <section class="section two-columns">
       <div>
         <h1>Анкета</h1>
-        <p class="muted">Параметры нужны стилисту, чтобы подобрать образ под вас.</p>
+        <p class="muted">Рост, вес и тип фигуры учитываются при AI-примерке.</p>
         <form id="profile-form" class="form">
           <label>Имя
             <input name="name" required maxlength="50" autocomplete="given-name">
@@ -66,35 +66,22 @@
       </div>
 
       <div class="panel">
-        <h2>AI-стилист</h2>
-        <p class="muted">Напишите, куда собираетесь, — стилист соберёт комплект из вещей в наличии.</p>
-        <form id="stylist-form" class="form">
-          <label>Повод
-            <input name="occasion" required placeholder="свидание в ресторане">
-          </label>
-          <label><span>Бюджет на образ, ₸ (необязательно)</span>
-            <input name="budget" type="number" placeholder="80000">
+        <h2>Фото для примерки</h2>
+        <p class="muted">Загрузите фото в полный рост — на нём AI «наденет» вещи из примерочной. JPEG или PNG, до 5 МБ.</p>
+        <img id="photo-preview" class="photo-preview" alt="Ваше фото" hidden>
+        <form id="photo-form" class="form">
+          <label>Файл
+            <input name="file" type="file" accept="image/jpeg,image/png" required>
           </label>
           <div class="actions">
-            <button class="btn" type="submit">Подобрать образ</button>
+            <button class="btn" type="submit">Загрузить фото</button>
           </div>
-          <p id="stylist-message" class="message"></p>
+          <p id="photo-message" class="message"></p>
         </form>
       </div>
     </section>
-
-    <section id="stylist-result" class="section" hidden>
-      <div class="section-head">
-        <h2>Ваш образ</h2>
-        <span id="stylist-source" class="tag"></span>
-      </div>
-      <p id="stylist-comment" class="lead"></p>
-      <div id="stylist-items" class="grid"></div>
-      <p id="stylist-total" class="total"></p>
-    </section>
   </main>
 
-  <p id="toast" class="toast" role="status" hidden></p>
   <footer class="footer">Zhibek Lite — учебный проект по веб-программированию</footer>
   <script src="app.js"></script>
 </body>
