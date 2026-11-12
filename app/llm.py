@@ -1,11 +1,15 @@
 import base64
+import logging
 import os
 
 import httpx
 
 from app.exceptions import LLMError
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+STUDIO_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+VERTEX_URL = "https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent"
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def load_env(path: str = ".env") -> None:
@@ -26,19 +30,30 @@ async def generate_try_on(prompt: str, images: list[dict]) -> bytes:
 
     model = os.getenv("LLM_MODEL", "gemini-2.5-flash-image")
     parts = [{"text": prompt}] + [{"inline_data": image} for image in images]
+    if os.getenv("GEMINI_BACKEND", "").lower() == "vertex":
+        url = VERTEX_URL.format(model=model)
+        auth = {"params": {"key": api_key}}
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["IMAGE"],
+                "imageConfig": {"aspectRatio": "3:4"},
+            },
+        }
+    else:
+        url = STUDIO_URL.format(model=model)
+        auth = {"headers": {"x-goog-api-key": api_key}}
+        body = {"contents": [{"parts": parts}]}
+
     try:
         async with httpx.AsyncClient(timeout=90) as client:
-            response = await client.post(
-                GEMINI_URL.format(model=model),
-                headers={"x-goog-api-key": api_key},
-                json={"contents": [{"parts": parts}]},
-            )
+            response = await client.post(url, json=body, **auth)
         response.raise_for_status()
         answer_parts = response.json()["candidates"][0]["content"]["parts"]
     except httpx.HTTPStatusError as error:
+        logger.error("Gemini %s: %s", error.response.status_code, error.response.text)
         raise LLMError(f"Gemini answered with status {error.response.status_code}")
     except Exception as error:
-        # сеть, таймаут, неожиданная структура ответа: сервер не падает, клиент получит 502
         raise LLMError(f"Gemini request failed: {type(error).__name__}")
 
     for part in answer_parts:

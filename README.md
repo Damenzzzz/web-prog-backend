@@ -23,6 +23,7 @@ uvicorn app.main:app --reload
 | `GEMINI_API_KEY` | пусто | ключ Gemini API для AI-примерки; без него примерка отвечает 502 |
 | `LLM_MODEL` | `gemini-2.5-flash-image` | модель, которая генерирует картинку |
 | `LLM_MOCK` | `false` | `true` — Gemini не вызывается, результатом примерки становится копия фото пользователя |
+| `GEMINI_BACKEND` | пусто | `vertex` — ключ от Vertex AI (Google Cloud): запрос идёт на `aiplatform.googleapis.com`, ключ передаётся в `?key=`; пусто — ключ Google AI Studio |
 
 Без ключа удобно проверять всё остальное с `LLM_MOCK=true`.
 
