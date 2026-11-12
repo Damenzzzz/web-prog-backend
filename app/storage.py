@@ -1,15 +1,28 @@
-"""Хранилище в памяти: обычные словари. После перезапуска сервера данные сбрасываются."""
+from datetime import datetime
+from pathlib import Path
 
-items: dict[int, dict] = {}  # id товара -> товар
-looks: dict[int, dict] = {}  # id образа -> {"id", "title"}
-users: dict[int, dict] = {}  # id пользователя -> анкета
-fitting_rooms: dict[int, list[dict]] = {}  # id пользователя -> [{"item_id": 1, "quantity": 2}, ...]
-orders: dict[int, dict] = {}  # id заказа -> заказ
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-# последние выданные id для каждой сущности
-_last_ids = {"item": 0, "look": 0, "user": 0, "order": 0}
+items: dict[int, dict] = {}
+looks: dict[int, dict] = {}
+users: dict[int, dict] = {}
+fitting_rooms: dict[int, list[dict]] = {}
+orders: dict[int, dict] = {}
+try_ons: dict[int, dict] = {}
+try_on_times: dict[int, list[datetime]] = {}
+
+_last_ids = {"item": 0, "look": 0, "user": 0, "order": 0, "try_on": 0}
 
 
 def next_id(kind: str) -> int:
     _last_ids[kind] += 1
     return _last_ids[kind]
+
+
+def static_path(url: str) -> Path:
+    return STATIC_DIR / url.lstrip("/")
+
+
+def delete_file(url: str | None) -> None:
+    if url:
+        static_path(url).unlink(missing_ok=True)

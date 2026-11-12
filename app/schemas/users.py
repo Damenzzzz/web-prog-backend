@@ -36,3 +36,4 @@ class UserUpdate(BaseModel):
 
 class UserOut(UserCreate):
     id: int
+    photo_url: str | None = None

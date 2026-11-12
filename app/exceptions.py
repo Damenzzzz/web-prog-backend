@@ -29,6 +29,21 @@ class BusinessRuleError(AppError):
     error = "business_rule"
 
 
+class UnsupportedMediaError(AppError):
+    status_code = 415
+    error = "unsupported_media_type"
+
+
+class TooManyRequestsError(AppError):
+    status_code = 429
+    error = "too_many_requests"
+
+
+class LLMError(AppError):
+    status_code = 502
+    error = "bad_gateway"
+
+
 def error_response(status_code: int, error: str, detail: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": error, "detail": detail})
 

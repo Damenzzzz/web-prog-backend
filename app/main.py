@@ -1,14 +1,19 @@
-from pathlib import Path
+import shutil
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app import llm, seed
+from app import llm, seed, storage
 from app.exceptions import register_exception_handlers
-from app.routers import fitting_room, items, orders, stylist, users
+from app.routers import fitting_room, items, orders, try_on, users
 
-llm.load_env()  # GEMINI_API_KEY и LLM_MODEL из файла .env
-seed.load_seed()  # стартовые товары и образы
+llm.load_env()
+seed.load_seed()
+
+# данные живут в памяти, поэтому фото и результаты прошлого запуска тоже стираем
+for folder in ("uploads", "results"):
+    shutil.rmtree(storage.STATIC_DIR / folder, ignore_errors=True)
+    (storage.STATIC_DIR / folder).mkdir()
 
 app = FastAPI(title="Zhibek Lite", description="Учебный бэкенд сайта подбора одежды")
 register_exception_handlers(app)
@@ -17,8 +22,6 @@ app.include_router(items.router)
 app.include_router(users.router)
 app.include_router(fitting_room.router)
 app.include_router(orders.router)
-app.include_router(stylist.router)
+app.include_router(try_on.router)
 
-# фронт подключаем последним, чтобы он не перекрывал адреса API; static/index.html открывается по "/"
-STATIC_DIR = Path(__file__).parent.parent / "static"
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+app.mount("/", StaticFiles(directory=storage.STATIC_DIR, html=True), name="static")
