@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Каталог — Zhibek Lite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Prata&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-page="catalog">
+  <header class="header">
+    <a class="logo" href="index.html">Zhibek <span>lite</span></a>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a class="active" href="catalog.html">Каталог</a>
+      <a href="profile.html">Профиль</a>
+      <a href="fitting-room.html">Примерочная <span id="room-count" class="count" hidden></span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="section">
+      <h1 id="catalog-title">Каталог</h1>
+      <div id="filters" class="chips"></div>
+
+      <!-- блок «дополните образ» появляется после клика по карточке -->
+      <div id="matches" class="panel" hidden>
+        <div class="section-head">
+          <h2 id="matches-title"></h2>
+          <button id="matches-close" class="link" type="button">Скрыть</button>
+        </div>
+        <div id="matches-list" class="grid"></div>
+      </div>
+
+      <p class="muted hint">Нажмите на карточку, чтобы увидеть, с чем сочетается вещь.</p>
+      <div id="items" class="grid"></div>
+      <p id="catalog-error" class="error"></p>
+    </section>
+  </main>
+
+  <p id="toast" class="toast" role="status" hidden></p>
+  <footer class="footer">Zhibek Lite — учебный проект по веб-программированию</footer>
+  <script src="app.js"></script>
+</body>
+</html>

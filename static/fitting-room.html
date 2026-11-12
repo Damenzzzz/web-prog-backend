@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Примерочная — Zhibek Lite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Prata&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-page="room">
+  <header class="header">
+    <a class="logo" href="index.html">Zhibek <span>lite</span></a>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a href="catalog.html">Каталог</a>
+      <a href="profile.html">Профиль</a>
+      <a class="active" href="fitting-room.html">Примерочная <span id="room-count" class="count" hidden></span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="section narrow">
+      <h1>Примерочная</h1>
+      <div id="room-list" class="rows"></div>
+      <div id="room-footer" class="room-footer" hidden>
+        <p id="room-total" class="total"></p>
+        <button id="order-button" class="btn" type="button">Оформить заказ</button>
+      </div>
+      <p id="room-message" class="message"></p>
+    </section>
+
+    <section class="section narrow">
+      <h2>Мои заказы</h2>
+      <div id="orders" class="rows"></div>
+      <p id="orders-message" class="message"></p>
+    </section>
+  </main>
+
+  <footer class="footer">Zhibek Lite — учебный проект по веб-программированию</footer>
+  <script src="app.js"></script>
+</body>
+</html>

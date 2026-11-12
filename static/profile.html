@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Профиль — Zhibek Lite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Prata&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-page="profile">
+  <header class="header">
+    <a class="logo" href="index.html">Zhibek <span>lite</span></a>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a href="catalog.html">Каталог</a>
+      <a class="active" href="profile.html">Профиль</a>
+      <a href="fitting-room.html">Примерочная <span id="room-count" class="count" hidden></span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="section two-columns">
+      <div>
+        <h1>Анкета</h1>
+        <p class="muted">Параметры нужны стилисту, чтобы подобрать образ под вас.</p>
+        <form id="profile-form" class="form">
+          <label>Имя
+            <input name="name" required maxlength="50" autocomplete="given-name">
+          </label>
+          <div class="form-row">
+            <label>Рост, см
+              <input name="height_cm" type="number" required>
+            </label>
+            <label>Вес, кг
+              <input name="weight_kg" type="number" required>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Пол
+              <select name="gender">
+                <option value="female">Женский</option>
+                <option value="male">Мужской</option>
+              </select>
+            </label>
+            <label>Тип фигуры
+              <select name="body_type">
+                <option value="slim">Стройная</option>
+                <option value="average" selected>Средняя</option>
+                <option value="athletic">Спортивная</option>
+                <option value="plus">Плюс-сайз</option>
+              </select>
+            </label>
+          </div>
+          <label><span>Любимый стиль (необязательно)</span>
+            <input name="style_preference" maxlength="200" placeholder="минимализм, спокойные цвета">
+          </label>
+          <div class="actions">
+            <button class="btn" type="submit">Сохранить</button>
+            <button id="profile-delete" class="link danger" type="button" hidden>Удалить анкету</button>
+          </div>
+          <p id="profile-message" class="message"></p>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>AI-стилист</h2>
+        <p class="muted">Напишите, куда собираетесь, — стилист соберёт комплект из вещей в наличии.</p>
+        <form id="stylist-form" class="form">
+          <label>Повод
+            <input name="occasion" required placeholder="свидание в ресторане">
+          </label>
+          <label><span>Бюджет на образ, ₸ (необязательно)</span>
+            <input name="budget" type="number" placeholder="80000">
+          </label>
+          <div class="actions">
+            <button class="btn" type="submit">Подобрать образ</button>
+          </div>
+          <p id="stylist-message" class="message"></p>
+        </form>
+      </div>
+    </section>
+
+    <section id="stylist-result" class="section" hidden>
+      <div class="section-head">
+        <h2>Ваш образ</h2>
+        <span id="stylist-source" class="tag"></span>
+      </div>
+      <p id="stylist-comment" class="lead"></p>
+      <div id="stylist-items" class="grid"></div>
+      <p id="stylist-total" class="total"></p>
+    </section>
+  </main>
+
+  <p id="toast" class="toast" role="status" hidden></p>
+  <footer class="footer">Zhibek Lite — учебный проект по веб-программированию</footer>
+  <script src="app.js"></script>
+</body>
+</html>

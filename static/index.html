@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zhibek Lite — подбор одежды</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Prata&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-page="home">
+  <header class="header">
+    <a class="logo" href="index.html">Zhibek <span>lite</span></a>
+    <nav class="nav">
+      <a class="active" href="index.html">Главная</a>
+      <a href="catalog.html">Каталог</a>
+      <a href="profile.html">Профиль</a>
+      <a href="fitting-room.html">Примерочная <span id="room-count" class="count" hidden></span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Осень — зима</p>
+        <h1>Образ, который собирается сам</h1>
+        <p class="lead">Выберите одну вещь — мы подскажем, чем её дополнить. Или расскажите стилисту, куда идёте, и получите готовый комплект.</p>
+        <div class="actions">
+          <a class="btn" href="catalog.html">Открыть каталог</a>
+          <a class="btn ghost" href="profile.html">Спросить стилиста</a>
+        </div>
+      </div>
+      <div class="hero-board" aria-hidden="true">
+        <div class="swatch" style="background:#a9482d;color:#f7f1e7">Верх</div>
+        <div class="swatch" style="background:#dcc9a8">Низ</div>
+        <div class="swatch" style="background:#f7f1e7">Обувь</div>
+        <div class="swatch" style="background:#2a211c;color:#f7f1e7">Сумка</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Готовые образы</h2>
+        <a class="link" href="catalog.html">Весь каталог</a>
+      </div>
+      <div id="looks" class="grid looks"></div>
+      <p id="looks-error" class="error"></p>
+    </section>
+  </main>
+
+  <footer class="footer">Zhibek Lite — учебный проект по веб-программированию</footer>
+  <script src="app.js"></script>
+</body>
+</html>
