@@ -1,7 +1,7 @@
 # Zhibek Lite
 
-Учебный проект по веб-программированию: минимальный бэкенд на FastAPI и лёгкий фронт для сайта подбора одежды.
-Без базы данных — все данные лежат в памяти и сбрасываются при перезапуске сервера.
+Учебный проект по веб-программированию: минимальный бэкенд на FastAPI и лёгкий фронт для сайта подбора одежды
+с AI-примеркой. Без базы данных — все данные лежат в памяти и сбрасываются при перезапуске сервера.
 
 ## Запуск
 
@@ -14,22 +14,44 @@ uvicorn app.main:app --reload
 - Сайт: http://127.0.0.1:8000
 - Swagger: http://127.0.0.1:8000/docs
 
-AI-стилист работает и без ключа (режим fallback). Чтобы подключить Gemini, скопируйте `.env.example` в `.env`
-и впишите `GEMINI_API_KEY`. Ключ читается только из `.env`, в коде его нет.
+### Переменные окружения
+
+Скопируйте `.env.example` в `.env`. Ключ читается только из `.env` (или из окружения), в коде его нет.
+
+| Переменная | По умолчанию | Зачем |
+|---|---|---|
+| `GEMINI_API_KEY` | пусто | ключ Gemini API для AI-примерки; без него примерка отвечает 502 |
+| `LLM_MODEL` | `gemini-2.5-flash-image` | модель, которая генерирует картинку |
+| `LLM_MOCK` | `false` | `true` — Gemini не вызывается, результатом примерки становится копия фото пользователя |
+
+Без ключа удобно проверять всё остальное с `LLM_MOCK=true`.
+
+### Запуск в Docker
+
+```bash
+cp .env.example .env            # вписать ключ или LLM_MOCK=true
+docker build -t zhibek-lite .
+docker run -d --name zhibek-lite -p 8000:8000 --env-file .env zhibek-lite
+```
+
+Если порт 8000 занят, поменяйте левое число: `-p 8090:8000` → сайт будет на http://127.0.0.1:8090.
 
 ## Структура
 
 ```
 app/
   main.py         сборка приложения: роутеры, обработчики ошибок, статика, seed
-  storage.py      словари items, looks, users, fitting_rooms, orders + счётчики id
-  seed.py         15 товаров и 4 образа
-  exceptions.py   NotFoundError, ConflictError, BusinessRuleError и обработчики
+  storage.py      словари items, looks, users, fitting_rooms, orders, try_ons + счётчики id
+  seed.py         15 товаров с фотографиями и 4 образа
+  exceptions.py   свои исключения (400, 404, 409, 415, 429, 502) и обработчики
   llm.py          один запрос к Gemini через httpx
   schemas/        Pydantic-модели запросов и ответов
   services/       вся бизнес-логика (обычные функции)
   routers/        тонкие роутеры: принять → вызвать сервис → вернуть
-static/           index.html, catalog.html, profile.html, fitting-room.html, style.css, app.js
+static/
+  *.html, style.css, app.js   фронт
+  catalog/                    фотографии товаров
+  uploads/, results/          фото пользователей и результаты примерок (создаются при старте)
 ```
 
 ## Эндпоинты
@@ -48,7 +70,8 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 | GET | `/users/{id}` | Одна анкета | 200, 404 |
 | POST | `/users` | Создать анкету | 201, 422 |
 | PATCH | `/users/{id}` | Изменить анкету | 200, 404, 422 |
-| DELETE | `/users/{id}` | Удалить анкету вместе с примерочной | 204, 404, 409 |
+| DELETE | `/users/{id}` | Удалить анкету вместе с фото, примерочной и примерками | 204, 404, 409 |
+| POST | `/users/{id}/photo` | Загрузить фото пользователя (файл, JPEG или PNG до 5 МБ) | 200, 400, 404, 415 |
 | GET | `/users/{id}/fitting-room` | Примерочная с суммой | 200, 404 |
 | POST | `/users/{id}/fitting-room/items` | Добавить товар `{item_id, quantity}` | 201, 400, 404, 422 |
 | PATCH | `/users/{id}/fitting-room/items/{item_id}` | Изменить количество `{quantity}` | 200, 400, 404, 422 |
@@ -57,7 +80,10 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 | GET | `/users/{id}/orders` | Заказы пользователя | 200, 404 |
 | GET | `/orders/{id}` | Один заказ | 200, 404 |
 | PATCH | `/orders/{id}/status` | Сменить статус `{status}` | 200, 404, 409, 422 |
-| POST | `/users/{id}/stylist` | AI-стилист `{occasion, budget?}` | 200, 404, 422 |
+| POST | `/users/{id}/try-ons` | AI-примерка `{item_ids}` (1–3 вещи) | 201, 400, 404, 422, 429, 502 |
+| GET | `/users/{id}/try-ons` | История примерок пользователя | 200, 404 |
+| GET | `/try-ons/{id}` | Одна примерка | 200, 404 |
+| DELETE | `/try-ons/{id}` | Удалить примерку и файл результата | 204, 404 |
 
 Любая ошибка возвращается в одном формате:
 
@@ -67,10 +93,13 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 
 | Код | `error` | Когда |
 |---|---|---|
-| 400 | `business_rule` | нарушено бизнес-правило (нет столько на складе, примерочная пуста или переполнена) |
+| 400 | `business_rule` | нарушено бизнес-правило (нет столько на складе, примерочная пуста, нет фото для примерки) |
 | 404 | `not_found` | объекта с таким id нет |
 | 409 | `conflict` | действие противоречит текущему состоянию (товар в примерочной, недопустимый статус) |
+| 415 | `unsupported_media_type` | загружен файл не JPEG и не PNG |
 | 422 | `validation_error` | Pydantic не принял входные данные |
+| 429 | `too_many_requests` | исчерпан дневной лимит примерок |
+| 502 | `bad_gateway` | Gemini недоступна или не вернула картинку |
 
 ## Четыре workflow
 
@@ -89,7 +118,8 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 
 - CRUD анкеты: имя, рост (100–250), вес (30–250), пол, тип фигуры, любимый стиль.
 - При создании пользователя ему заводится пустая примерочная.
-- Пользователя нельзя удалить, пока у него есть заказ в статусе `pending` или `paid` → 409. Иначе он удаляется вместе с примерочной.
+- Пользователя нельзя удалить, пока у него есть заказ в статусе `pending` или `paid` → 409. Иначе он удаляется
+  вместе с фото, примерочной и примерками.
 
 ### 3. Примерочная → заказ — `services/fitting_room.py`, `services/orders.py`
 
@@ -101,14 +131,25 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 - Статусы: `pending → paid → shipped`, из `pending` и `paid` можно в `cancelled`. Любой другой переход → 409.
   При отмене товары возвращаются на склад.
 
-### 4. AI-стилист — `services/stylist.py`, `llm.py`
+### 4. AI-примерка — `services/try_on.py`, `llm.py`
 
-- Сервис собирает промпт: анкета + повод + бюджет + товары в наличии. Просит LLM ответить строго JSON `{"item_ids": [...], "comment": "..."}`.
-- Ответ LLM не принимается на веру: JSON проверяется Pydantic-моделью `LLMAnswer`, остаются только существующие товары в наличии,
-  затем вещи отбираются так, чтобы сумма уложилась в бюджет (бюджет — на весь образ).
-- Fallback: если ключа нет, LLM недоступна, ответила не JSON или не выбрала ни одного настоящего товара —
-  образ собирается по правилам из workflow 1 (верх + подходящие к нему вещи), а в ответе `"source": "fallback"` вместо `"llm"`.
-- `llm.py` при любой ошибке (сеть, таймаут 20 с, ответ 4xx/5xx) возвращает `None`, поэтому сервер не отвечает 500.
+Gemini получает фото пользователя и фото выбранных вещей и возвращает картинку, где человек одет в эти вещи.
+
+- Фото пользователя: `POST /users/{id}/photo`. Формат проверяется по первым байтам файла: не JPEG и не PNG → 415,
+  больше 5 МБ → 400. Файл сохраняется в `static/uploads/`, путь пишется в поле `photo_url` анкеты.
+- Примерка: `POST /users/{id}/try-ons` с `item_ids` (от 1 до 3, иначе 422). Проверки по порядку:
+  1. у пользователя нет фото → 400;
+  2. какого-то товара нет → 404;
+  3. больше одной вещи на категорию → 400;
+  4. у вещи нет фотографии в `static/` → 400;
+  5. уже было 3 примерки за последние 24 часа → 429. Считаются все попытки, дошедшие до генерации, включая неудачные;
+     удаление примерки из истории лимит не сбрасывает (времена попыток хранятся отдельно в `storage.try_on_times`).
+- Сервис собирает промпт (рост, вес, тип фигуры + «одень человека с первого фото в вещи с остальных фото, сохрани лицо, позу и фон»)
+  и кодирует фото в base64. `llm.generate_try_on` делает один POST в Gemini (таймаут 90 с) и достаёт из ответа первую часть с `inlineData`.
+- Результат сохраняется в `static/results/{id}.png`, запись получает `status: done` и `result_url`.
+- Если ключа нет, Gemini ответила ошибкой, случился таймаут или в ответе нет картинки — `llm.py` бросает `LLMError`.
+  Сервер не падает: примерка остаётся в истории со `status: failed` и текстом ошибки, клиент получает 502 в общем формате.
+- `LLM_MOCK=true`: Gemini не вызывается, `result_url` — копия фото пользователя, `source: "mock"`.
 
 ## Проверки в Swagger
 
@@ -119,7 +160,7 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 | Проверка | Запрос | Ожидаем |
 |---|---|---|
 | Успех | `GET /items?category=top&in_stock=true` | 200, только верх в наличии |
-| Успех | `GET /items/1/matches` | 200, брюки, тренч, лоферы, сумка |
+| Успех | `GET /items/1/matches` | 200, брюки, жилет, туфли и сумка |
 | Успех | `POST /items` `{"name":"Шарф","category":"accessory","color":"серый","price":5000,"stock":2}` | 201, `id: 16` |
 | 422 | `POST /items` с `"price": -5` или `"category": "hat"` | 422 `validation_error` |
 | 404 | `GET /items/999` | 404 `not_found` |
@@ -130,7 +171,7 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 
 | Проверка | Запрос | Ожидаем |
 |---|---|---|
-| Успех | `POST /users` `{"name":"Айгерим","height_cm":168,"weight_kg":58,"gender":"female","body_type":"slim"}` | 201, `id: 1` |
+| Успех | `POST /users` `{"name":"Айгерим","height_cm":168,"weight_kg":58,"gender":"female","body_type":"slim"}` | 201, `id: 1`, `photo_url: null` |
 | Успех | `PATCH /users/1` `{"weight_kg": 59}` | 200, остальные поля не изменились |
 | 422 | `POST /users` с `"height_cm": 50` | 422 `validation_error` |
 | 404 | `GET /users/999` | 404 `not_found` |
@@ -148,17 +189,27 @@ static/           index.html, catalog.html, profile.html, fitting-room.html, sty
 | 422 | `POST /users/1/fitting-room/items` `{"item_id":1,"quantity":0}` | 422 `validation_error` |
 | 404 | `POST /users/1/fitting-room/items` `{"item_id":999,"quantity":1}` | 404 `not_found` |
 | 409 | `PATCH /items/1` `{"stock":1}`, затем `POST /users/1/orders` | 409 `conflict` — остатка уже не хватает |
-| Успех | `PATCH /items/1` `{"stock":12}`, затем `POST /users/1/orders` | 201, `status: pending`, `total: 56700`; остаток товара 1 стал 9, примерочная пуста |
+| Успех | `PATCH /items/1` `{"stock":12}`, затем `POST /users/1/orders` | 201, `status: pending`, `total: 65700`; остаток товара 1 стал 9, примерочная пуста |
 | 409 | `PATCH /orders/1/status` `{"status":"shipped"}` | 409 — из `pending` нельзя сразу в `shipped` |
 | Успех | `PATCH /orders/1/status` `{"status":"paid"}`, затем `{"status":"cancelled"}` | 200; после отмены остаток товара 1 снова 12 |
 | 400 | добавить в примерочную товары 1–10, затем товар 11 | 400 — максимум 10 позиций |
 
-### Workflow 4. AI-стилист
+### Workflow 4. AI-примерка
+
+Шаги до «502» удобно проходить с `LLM_MOCK=true` в `.env`.
 
 | Проверка | Запрос | Ожидаем |
 |---|---|---|
-| Успех | `POST /users/1/stylist` `{"occasion":"свидание в ресторане","budget":80000}` | 200, сумма образа не больше бюджета; `source: "llm"` с ключом, `"fallback"` без ключа |
-| Fallback | убрать ключ из `.env` (или вписать неверный), перезапустить, повторить запрос | 200, `source: "fallback"` |
-| 422 | `POST /users/1/stylist` `{"occasion":"ab"}` | 422 `validation_error` |
-| 404 | `POST /users/999/stylist` `{"occasion":"офис"}` | 404 `not_found` |
-| 409, 400 | — | |
+| 400 | `POST /users/1/try-ons` `{"item_ids":[1]}` до загрузки фото | 400 `business_rule` |
+| 415 | `POST /users/1/photo` с файлом `.txt` или `.pdf` | 415 `unsupported_media_type` |
+| 400 | `POST /users/1/photo` с JPEG больше 5 МБ | 400 `business_rule` |
+| Успех | `POST /users/1/photo` с обычным JPEG или PNG | 200, в анкете появился `photo_url` |
+| 422 | `POST /users/1/try-ons` `{"item_ids":[]}` или четыре id | 422 `validation_error` |
+| 404 | `POST /users/1/try-ons` `{"item_ids":[1,999]}` | 404 `not_found` |
+| 400 | `POST /users/1/try-ons` `{"item_ids":[1,5]}` (два верха) | 400 `business_rule` |
+| Успех | `POST /users/1/try-ons` `{"item_ids":[1,2,4]}` | 201, `status: done`, `source: "mock"` (или `"gemini"` с ключом), картинка открывается по `result_url` |
+| Успех | `GET /users/1/try-ons`, `GET /try-ons/1` | 200 |
+| Успех | `DELETE /try-ons/1` | 204, файл по `result_url` больше не открывается |
+| 429 | ещё две примерки, затем четвёртая за сутки | 429 `too_many_requests` (удаление примерки лимит не вернуло) |
+| 502 | убрать `LLM_MOCK` и ключ из `.env`, перезапустить, загрузить фото, `POST /users/1/try-ons` | 502 `bad_gateway`, сервер жив; в `GET /users/1/try-ons` запись со `status: failed` и текстом ошибки |
+| 409 | — | |
