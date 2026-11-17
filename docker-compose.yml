@@ -1,0 +1,40 @@
+name: zhibek-lite
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: zhibek-lite-db
+    environment:
+      POSTGRES_USER: zhibek
+      POSTGRES_PASSWORD: zhibek
+      POSTGRES_DB: zhibek
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zhibek -d zhibek"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    image: zhibek-lite:latest
+    container_name: zhibek-lite
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://zhibek:zhibek@db:5432/zhibek
+    ports:
+      - "8090:8000"
+    volumes:
+      - uploads:/app/static/uploads
+      - results:/app/static/results
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
+  results:
