@@ -12,7 +12,6 @@ class OrderStatus(StrEnum):
 
 
 class OrderItem(BaseModel):
-    # снапшот товара на момент заказа: цена в заказе не меняется, даже если товар потом изменят
     item_id: int
     name: str
     price: int

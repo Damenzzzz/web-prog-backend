@@ -28,7 +28,6 @@ async def update_user(user_id: int, data: UserUpdate):
 
 @router.post("/{user_id}/photo", response_model=UserOut)
 async def upload_photo(user_id: int, file: UploadFile):
-    # читаем на 1 байт больше лимита, чтобы сервис увидел превышение размера
     data = await file.read(users_service.MAX_PHOTO_BYTES + 1)
     return users_service.save_photo(user_id, data)
 

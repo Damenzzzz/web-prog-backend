@@ -34,7 +34,6 @@ def add_item(user_id: int, data: FittingRoomAdd) -> dict:
     room = storage.fitting_rooms[user_id]
     position = find_position(room, data.item_id)
 
-    # повторное добавление того же товара увеличивает количество, а не создаёт дубль
     new_quantity = data.quantity + (position["quantity"] if position else 0)
 
     if position is None and len(room) >= MAX_POSITIONS:

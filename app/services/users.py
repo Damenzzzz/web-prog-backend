@@ -5,7 +5,6 @@ from app.exceptions import BusinessRuleError, ConflictError, NotFoundError, Unsu
 from app.schemas.orders import OrderStatus
 from app.schemas.users import UserCreate, UserUpdate
 
-# заказы в этих статусах ещё «в работе»
 ACTIVE_STATUSES = [OrderStatus.pending, OrderStatus.paid]
 
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
@@ -26,19 +25,18 @@ def create_user(data: UserCreate) -> dict:
     user["id"] = storage.next_id("user")
     user["photo_url"] = None
     storage.users[user["id"]] = user
-    storage.fitting_rooms[user["id"]] = []  # у каждого пользователя одна примерочная
+    storage.fitting_rooms[user["id"]] = []
     return user
 
 
 def update_user(user_id: int, data: UserUpdate) -> dict:
     user = get_user(user_id)
-    user.update(data.model_dump(exclude_none=True))  # только переданные поля
+    user.update(data.model_dump(exclude_none=True))
     return user
 
 
 def save_photo(user_id: int, data: bytes) -> dict:
     user = get_user(user_id)
-    # принимаем только JPEG и PNG; формат определяем по первым байтам файла, а не по имени
     if data.startswith(b"\xff\xd8\xff"):
         extension = "jpg"
     elif data.startswith(b"\x89PNG"):
@@ -56,12 +54,10 @@ def save_photo(user_id: int, data: bytes) -> dict:
 
 def delete_user(user_id: int) -> None:
     user = get_user(user_id)
-    # нельзя удалить пользователя, пока у него есть неоплаченный или неотправленный заказ
     for order in storage.orders.values():
         if order["user_id"] == user_id and order["status"] in ACTIVE_STATUSES:
             raise ConflictError(f"User {user_id} has active order {order['id']} ({order['status']})")
 
-    # вместе с пользователем удаляем его фото и все примерки с файлами
     storage.delete_file(user["photo_url"])
     for try_on in list(storage.try_ons.values()):
         if try_on["user_id"] == user_id:

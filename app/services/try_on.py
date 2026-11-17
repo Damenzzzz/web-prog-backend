@@ -22,14 +22,12 @@ async def create_try_on(user_id: int, data: TryOnCreate) -> dict:
         raise BusinessRuleError("Upload your photo before trying clothes on")
     items = [items_service.get_item(item_id) for item_id in data.item_ids]
 
-    # в одной примерке не больше одной вещи каждой категории
     categories = [item["category"] for item in items]
     if len(set(categories)) < len(categories):
         raise BusinessRuleError("Only one item per category can be tried on")
 
     photos = [storage.static_path(user["photo_url"])] + [item_photo(item) for item in items]
 
-    # не больше 3 примерок на пользователя за последние 24 часа (неудачные попытки тоже считаются)
     now = datetime.now(timezone.utc)
     recent = [time for time in storage.try_on_times.get(user_id, []) if now - time < timedelta(days=1)]
     if len(recent) >= DAILY_LIMIT:
@@ -50,14 +48,12 @@ async def create_try_on(user_id: int, data: TryOnCreate) -> dict:
     storage.try_ons[try_on["id"]] = try_on
 
     if mock:
-        # режим без Gemini: результат — копия фото пользователя
         result_url = f"/results/{try_on['id']}{photos[0].suffix}"
         shutil.copy(photos[0], storage.static_path(result_url))
     else:
         try:
             image = await llm.generate_try_on(build_prompt(user, items), [encode_image(photo) for photo in photos])
         except LLMError as error:
-            # примерка остаётся в истории со статусом failed, клиент получает 502
             try_on["error"] = error.detail
             raise
         result_url = f"/results/{try_on['id']}.png"
@@ -69,7 +65,6 @@ async def create_try_on(user_id: int, data: TryOnCreate) -> dict:
 
 
 def item_photo(item: dict) -> Path:
-    # Gemini нужна настоящая фотография вещи, и лежать она должна внутри static/
     path = storage.static_path(item["image_url"] or "").resolve()
     if not path.is_file() or storage.STATIC_DIR not in path.parents:
         raise BusinessRuleError(f"Item {item['id']} has no photo for try-on")

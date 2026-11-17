@@ -23,7 +23,6 @@ class ItemCreate(BaseModel):
 
 
 class ItemUpdate(BaseModel):
-    # PATCH: все поля необязательные, меняются только переданные
     name: str | None = Field(None, min_length=1, max_length=100)
     category: Category | None = None
     color: str | None = Field(None, min_length=1, max_length=30)

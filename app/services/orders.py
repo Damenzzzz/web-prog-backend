@@ -7,7 +7,6 @@ from app.exceptions import BusinessRuleError, ConflictError, NotFoundError
 from app.schemas.orders import OrderStatus
 from app.services import users as users_service
 
-# из какого статуса в какой можно перейти
 ALLOWED_TRANSITIONS = {
     OrderStatus.pending: [OrderStatus.paid, OrderStatus.cancelled],
     OrderStatus.paid: [OrderStatus.shipped, OrderStatus.cancelled],
@@ -22,13 +21,11 @@ def create_order(user_id: int) -> dict:
     if not room:
         raise BusinessRuleError("Fitting room is empty")
 
-    # повторная проверка: остаток мог измениться, пока товар лежал в примерочной
     for position in room:
         item = storage.items[position["item_id"]]
         if position["quantity"] > item["stock"]:
             raise ConflictError(f"Not enough stock for item {item['id']}: {item['stock']} left")
 
-    # все проверки пройдены — списываем остатки и собираем снапшот заказа
     order_items = []
     total = 0
     for position in room:
@@ -73,7 +70,6 @@ def change_status(order_id: int, new_status: OrderStatus) -> dict:
     if new_status not in ALLOWED_TRANSITIONS[order["status"]]:
         raise ConflictError(f"Cannot change order status from {order['status']} to {new_status}")
 
-    # при отмене возвращаем товары на склад (если товар за это время не удалили)
     if new_status == OrderStatus.cancelled:
         for row in order["items"]:
             if row["item_id"] in storage.items:

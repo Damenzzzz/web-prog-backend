@@ -25,7 +25,6 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    # PATCH: все поля необязательные, меняются только переданные
     name: str | None = Field(None, min_length=1, max_length=50)
     height_cm: int | None = Field(None, ge=100, le=250)
     weight_kg: int | None = Field(None, ge=30, le=250)

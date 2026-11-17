@@ -58,7 +58,6 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> JSONResponse:
-    # несуществующий адрес или метод
     error = "not_found" if exc.status_code == 404 else "http_error"
     return error_response(exc.status_code, error, str(exc.detail))
 

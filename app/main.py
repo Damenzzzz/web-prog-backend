@@ -10,7 +10,6 @@ from app.routers import fitting_room, items, orders, try_on, users
 llm.load_env()
 seed.load_seed()
 
-# данные живут в памяти, поэтому фото и результаты прошлого запуска тоже стираем
 for folder in ("uploads", "results"):
     shutil.rmtree(storage.STATIC_DIR / folder, ignore_errors=True)
     (storage.STATIC_DIR / folder).mkdir()

@@ -49,10 +49,16 @@ async def generate_try_on(prompt: str, images: list[dict]) -> bytes:
         async with httpx.AsyncClient(timeout=90) as client:
             response = await client.post(url, json=body, **auth)
         response.raise_for_status()
-        answer_parts = response.json()["candidates"][0]["content"]["parts"]
+        answer = response.json()
+        answer_parts = answer["candidates"][0]["content"]["parts"]
     except httpx.HTTPStatusError as error:
         logger.error("Gemini %s: %s", error.response.status_code, error.response.text)
         raise LLMError(f"Gemini answered with status {error.response.status_code}")
+    except (KeyError, IndexError):
+        logger.error("Gemini answer without image: %s", response.text[:2000])
+        candidates = answer.get("candidates") or [{}]
+        reason = answer.get("promptFeedback", {}).get("blockReason") or candidates[0].get("finishReason")
+        raise LLMError(f"Gemini refused to generate an image: {reason or 'unknown reason'}")
     except Exception as error:
         raise LLMError(f"Gemini request failed: {type(error).__name__}")
 
