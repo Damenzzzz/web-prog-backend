@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Category(StrEnum):
@@ -33,10 +33,12 @@ class ItemUpdate(BaseModel):
 
 
 class ItemOut(ItemCreate):
+    model_config = ConfigDict(from_attributes=True)
     id: int
 
 
 class LookOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     title: str
     item_ids: list[int]

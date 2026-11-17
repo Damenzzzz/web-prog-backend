@@ -1,20 +1,24 @@
-import shutil
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app import llm, seed, storage
+from app import seed, storage
+from app.db import SessionLocal
 from app.exceptions import register_exception_handlers
 from app.routers import fitting_room, items, orders, try_on, users
 
-llm.load_env()
-seed.load_seed()
 
-for folder in ("uploads", "results"):
-    shutil.rmtree(storage.STATIC_DIR / folder, ignore_errors=True)
-    (storage.STATIC_DIR / folder).mkdir()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    for folder in ("uploads", "results"):
+        (storage.STATIC_DIR / folder).mkdir(exist_ok=True)
+    with SessionLocal() as db:
+        seed.load_seed(db)
+    yield
 
-app = FastAPI(title="Zhibek Lite", description="Учебный бэкенд сайта подбора одежды")
+
+app = FastAPI(title="Zhibek Lite", description="Учебный бэкенд сайта подбора одежды", lifespan=lifespan)
 register_exception_handlers(app)
 
 app.include_router(items.router)

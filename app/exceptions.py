@@ -1,8 +1,7 @@
-"""Свои исключения и обработчики. Любая ошибка уходит клиенту как {"error": "...", "detail": "..."}."""
-
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 
@@ -62,6 +61,10 @@ async def handle_http_error(request: Request, exc: HTTPException) -> JSONRespons
     return error_response(exc.status_code, error, str(exc.detail))
 
 
+async def handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+    return error_response(409, "conflict", "Database constraint violated: " + str(exc.orig).splitlines()[0])
+
+
 async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     return error_response(500, "internal_error", "Unexpected server error")
 
@@ -70,4 +73,5 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, handle_app_error)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(HTTPException, handle_http_error)
+    app.add_exception_handler(IntegrityError, handle_integrity_error)
     app.add_exception_handler(Exception, handle_unexpected_error)

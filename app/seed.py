@@ -1,4 +1,7 @@
-from app import storage
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Item, Look
 from app.schemas.items import Category
 
 LOOKS = [
@@ -27,20 +30,11 @@ ITEMS = [
 ]
 
 
-def load_seed() -> None:
-    for title in LOOKS:
-        look_id = storage.next_id("look")
-        storage.looks[look_id] = {"id": look_id, "title": title}
-
-    for name, category, color, price, stock, look_id, photo in ITEMS:
-        item_id = storage.next_id("item")
-        storage.items[item_id] = {
-            "id": item_id,
-            "name": name,
-            "category": category,
-            "color": color,
-            "price": price,
-            "stock": stock,
-            "look_id": look_id,
-            "image_url": f"/catalog/{photo}",
-        }
+def load_seed(db: Session) -> None:
+    if db.scalar(select(Look.id).limit(1)) is not None:
+        return
+    looks = [Look(title=title) for title in LOOKS]
+    db.add_all(looks)
+    for name, category, color, price, stock, look_number, photo in ITEMS:
+        db.add(Item(name=name, category=category, color=color, price=price, stock=stock, look=looks[look_number - 1], image_url=f"/catalog/{photo}"))
+    db.commit()

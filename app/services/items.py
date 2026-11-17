@@ -1,7 +1,8 @@
-"""Workflow 1: каталог, образы и рекомендации «дополни образ»."""
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from app import storage
-from app.exceptions import ConflictError, NotFoundError
+from app.exceptions import BusinessRuleError, ConflictError, NotFoundError
+from app.models import FittingRoomRow, Item, Look
 from app.schemas.items import Category, ItemCreate, ItemUpdate
 
 NEUTRAL_COLORS = {"белый", "чёрный", "серый", "бежевый"}
@@ -16,69 +17,71 @@ MATCHING_CATEGORIES = {
 }
 
 
-def list_items(category=None, color=None, min_price=None, max_price=None, in_stock=None) -> list[dict]:
-    result = list(storage.items.values())
+def list_items(db: Session, category=None, color=None, min_price=None, max_price=None, in_stock=None) -> list[Item]:
+    query = select(Item).order_by(Item.id)
     if category is not None:
-        result = [item for item in result if item["category"] == category]
+        query = query.where(Item.category == category)
     if color is not None:
-        result = [item for item in result if item["color"].lower() == color.lower()]
+        query = query.where(func.lower(Item.color) == color.lower())
     if min_price is not None:
-        result = [item for item in result if item["price"] >= min_price]
+        query = query.where(Item.price >= min_price)
     if max_price is not None:
-        result = [item for item in result if item["price"] <= max_price]
-    if in_stock is not None:
-        result = [item for item in result if (item["stock"] > 0) == in_stock]
-    return result
+        query = query.where(Item.price <= max_price)
+    if in_stock is True:
+        query = query.where(Item.stock > 0)
+    if in_stock is False:
+        query = query.where(Item.stock == 0)
+    return list(db.scalars(query))
 
 
-def get_item(item_id: int) -> dict:
-    if item_id not in storage.items:
+def get_item(db: Session, item_id: int) -> Item:
+    item = db.get(Item, item_id)
+    if item is None:
         raise NotFoundError(f"Item {item_id} not found")
-    return storage.items[item_id]
+    return item
 
 
-def create_item(data: ItemCreate) -> dict:
+def create_item(db: Session, data: ItemCreate) -> Item:
     if data.look_id is not None:
-        get_look(data.look_id)
-    item = data.model_dump()
-    item["id"] = storage.next_id("item")
-    storage.items[item["id"]] = item
+        get_look(db, data.look_id)
+    item = Item(**data.model_dump())
+    db.add(item)
+    db.commit()
     return item
 
 
-def update_item(item_id: int, data: ItemUpdate) -> dict:
-    item = get_item(item_id)
-    changes = data.model_dump(exclude_none=True)
-    if "look_id" in changes:
-        get_look(changes["look_id"])
-    item.update(changes)
+def update_item(db: Session, item_id: int, data: ItemUpdate) -> Item:
+    item = get_item(db, item_id)
+    changes = data.model_dump(exclude_unset=True)
+    for field in ("name", "category", "color", "price", "stock"):
+        if field in changes and changes[field] is None:
+            raise BusinessRuleError(f"Field {field} cannot be null")
+    if changes.get("look_id") is not None:
+        get_look(db, changes["look_id"])
+    for field, value in changes.items():
+        setattr(item, field, value)
+    db.commit()
     return item
 
 
-def delete_item(item_id: int) -> None:
-    get_item(item_id)
-    for user_id, room in storage.fitting_rooms.items():
-        for position in room:
-            if position["item_id"] == item_id:
-                raise ConflictError(f"Item {item_id} is in the fitting room of user {user_id}")
-    del storage.items[item_id]
+def delete_item(db: Session, item_id: int) -> None:
+    item = get_item(db, item_id)
+    row = db.scalar(select(FittingRoomRow).where(FittingRoomRow.item_id == item_id))
+    if row is not None:
+        raise ConflictError(f"Item {item_id} is in the fitting room of user {row.user_id}")
+    db.delete(item)
+    db.commit()
 
 
-def get_look(look_id: int) -> dict:
-    if look_id not in storage.looks:
+def get_look(db: Session, look_id: int) -> Look:
+    look = db.get(Look, look_id)
+    if look is None:
         raise NotFoundError(f"Look {look_id} not found")
-    look = storage.looks[look_id]
-    look_items = [item for item in storage.items.values() if item["look_id"] == look_id]
-    return {
-        "id": look["id"],
-        "title": look["title"],
-        "item_ids": [item["id"] for item in look_items],
-        "items": look_items,
-    }
+    return look
 
 
-def list_looks() -> list[dict]:
-    return [get_look(look_id) for look_id in storage.looks]
+def list_looks(db: Session) -> list[Look]:
+    return list(db.scalars(select(Look).order_by(Look.id)))
 
 
 def colors_match(first: str, second: str) -> bool:
@@ -86,24 +89,20 @@ def colors_match(first: str, second: str) -> bool:
     return first == second or first in NEUTRAL_COLORS or second in NEUTRAL_COLORS
 
 
-def find_matches(item_id: int, limit: int = 4) -> list[dict]:
-    """Рекомендации без ML: подходящая категория + сочетающийся цвет + есть в наличии."""
-    item = get_item(item_id)
-    candidates = [
-        other
-        for other in storage.items.values()
-        if other["id"] != item_id
-        and other["stock"] > 0
-        and other["category"] in MATCHING_CATEGORIES[item["category"]]
-        and colors_match(item["color"], other["color"])
-    ]
-    candidates.sort(key=lambda other: other["look_id"] != item["look_id"])
-
+def find_matches(db: Session, item_id: int, limit: int = 4) -> list[Item]:
+    item = get_item(db, item_id)
+    query = select(Item).where(
+        Item.id != item_id,
+        Item.stock > 0,
+        Item.category.in_(MATCHING_CATEGORIES[item.category]),
+    ).order_by(Item.id)
+    candidates = [other for other in db.scalars(query) if colors_match(item.color, other.color)]
+    candidates.sort(key=lambda other: other.look_id != item.look_id)
     result = []
     used_categories = set()
     for other in candidates:
-        if other["category"] not in used_categories:
+        if other.category not in used_categories:
             result.append(other)
-            used_categories.add(other["category"])
+            used_categories.add(other.category)
     result += [other for other in candidates if other not in result]
     return result[:limit]

@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Gender(StrEnum):
@@ -34,5 +34,6 @@ class UserUpdate(BaseModel):
 
 
 class UserOut(UserCreate):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     photo_url: str | None = None

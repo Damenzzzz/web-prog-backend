@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class OrderStatus(StrEnum):
@@ -12,13 +12,15 @@ class OrderStatus(StrEnum):
 
 
 class OrderItem(BaseModel):
-    item_id: int
+    model_config = ConfigDict(from_attributes=True)
+    item_id: int | None
     name: str
     price: int
     quantity: int
 
 
 class OrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
     items: list[OrderItem]

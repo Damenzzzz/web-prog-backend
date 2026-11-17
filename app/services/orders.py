@@ -1,9 +1,8 @@
-"""Workflow 3 (часть 2): оформление заказа из примерочной и смена статуса."""
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from datetime import datetime, timezone
-
-from app import storage
 from app.exceptions import BusinessRuleError, ConflictError, NotFoundError
+from app.models import FittingRoomRow, Item, Order, OrderItem
 from app.schemas.orders import OrderStatus
 from app.services import users as users_service
 
@@ -15,65 +14,50 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def create_order(user_id: int) -> dict:
-    users_service.get_user(user_id)
-    room = storage.fitting_rooms[user_id]
-    if not room:
+def create_order(db: Session, user_id: int) -> Order:
+    users_service.get_user(db, user_id)
+    rows = list(db.scalars(select(FittingRoomRow).where(FittingRoomRow.user_id == user_id).order_by(FittingRoomRow.id)))
+    if not rows:
         raise BusinessRuleError("Fitting room is empty")
-
-    for position in room:
-        item = storage.items[position["item_id"]]
-        if position["quantity"] > item["stock"]:
-            raise ConflictError(f"Not enough stock for item {item['id']}: {item['stock']} left")
-
-    order_items = []
-    total = 0
-    for position in room:
-        item = storage.items[position["item_id"]]
-        item["stock"] -= position["quantity"]
-        order_items.append(
-            {
-                "item_id": item["id"],
-                "name": item["name"],
-                "price": item["price"],
-                "quantity": position["quantity"],
-            }
-        )
-        total += item["price"] * position["quantity"]
-
-    order = {
-        "id": storage.next_id("order"),
-        "user_id": user_id,
-        "items": order_items,
-        "total": total,
-        "status": OrderStatus.pending,
-        "created_at": datetime.now(timezone.utc),
-    }
-    storage.orders[order["id"]] = order
-    room.clear()
+    item_ids = [row.item_id for row in rows]
+    items = {item.id: item for item in db.scalars(select(Item).where(Item.id.in_(item_ids)).with_for_update())}
+    for row in rows:
+        item = items[row.item_id]
+        if row.quantity > item.stock:
+            db.rollback()
+            raise ConflictError(f"Not enough stock for item {item.id}: {item.stock} left")
+    order = Order(user_id=user_id, total=0, status=OrderStatus.pending)
+    for row in rows:
+        item = items[row.item_id]
+        item.stock -= row.quantity
+        order.items.append(OrderItem(item_id=item.id, name=item.name, price=item.price, quantity=row.quantity))
+        order.total += item.price * row.quantity
+        db.delete(row)
+    db.add(order)
+    db.commit()
+    db.refresh(order)
     return order
 
 
-def list_user_orders(user_id: int) -> list[dict]:
-    users_service.get_user(user_id)
-    return [order for order in storage.orders.values() if order["user_id"] == user_id]
+def list_user_orders(db: Session, user_id: int) -> list[Order]:
+    return users_service.get_user(db, user_id).orders
 
 
-def get_order(order_id: int) -> dict:
-    if order_id not in storage.orders:
+def get_order(db: Session, order_id: int) -> Order:
+    order = db.get(Order, order_id)
+    if order is None:
         raise NotFoundError(f"Order {order_id} not found")
-    return storage.orders[order_id]
+    return order
 
 
-def change_status(order_id: int, new_status: OrderStatus) -> dict:
-    order = get_order(order_id)
-    if new_status not in ALLOWED_TRANSITIONS[order["status"]]:
-        raise ConflictError(f"Cannot change order status from {order['status']} to {new_status}")
-
+def change_status(db: Session, order_id: int, new_status: OrderStatus) -> Order:
+    order = get_order(db, order_id)
+    if new_status not in ALLOWED_TRANSITIONS[order.status]:
+        raise ConflictError(f"Cannot change order status from {order.status} to {new_status}")
     if new_status == OrderStatus.cancelled:
-        for row in order["items"]:
-            if row["item_id"] in storage.items:
-                storage.items[row["item_id"]]["stock"] += row["quantity"]
-
-    order["status"] = new_status
+        for row in order.items:
+            if row.item_id is not None:
+                db.get(Item, row.item_id).stock += row.quantity
+    order.status = new_status
+    db.commit()
     return order
