@@ -115,6 +115,7 @@ class TryOn(Base):
     result_url: Mapped[str | None] = mapped_column(String(255))
     error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     user: Mapped[User] = relationship(back_populates="try_ons")
     items: Mapped[list[Item]] = relationship(secondary=try_on_items, order_by=Item.id)
 

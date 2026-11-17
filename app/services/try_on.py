@@ -81,19 +81,19 @@ def build_prompt(user: User, items: list[Item]) -> str:
 
 
 def list_user_try_ons(db: Session, user_id: int) -> list[TryOn]:
-    return users_service.get_user(db, user_id).try_ons
+    return [try_on for try_on in users_service.get_user(db, user_id).try_ons if try_on.deleted_at is None]
 
 
 def get_try_on(db: Session, try_on_id: int) -> TryOn:
     try_on = db.get(TryOn, try_on_id)
-    if try_on is None:
+    if try_on is None or try_on.deleted_at is not None:
         raise NotFoundError(f"Try-on {try_on_id} not found")
     return try_on
 
 
 def delete_try_on(db: Session, try_on_id: int) -> None:
     try_on = get_try_on(db, try_on_id)
-    result_url = try_on.result_url
-    db.delete(try_on)
+    storage.delete_file(try_on.result_url)
+    try_on.result_url = None
+    try_on.deleted_at = datetime.now(timezone.utc)
     db.commit()
-    storage.delete_file(result_url)

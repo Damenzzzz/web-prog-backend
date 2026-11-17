@@ -119,4 +119,6 @@ def test_try_on_mock_and_daily_limit(client):
     try_on_id = client.get(f"/users/{user_id}/try-ons").json()[0]["id"]
     assert client.delete(f"/try-ons/{try_on_id}").status_code == 204
     assert client.get(f"/try-ons/{try_on_id}").status_code == 404
+    assert len(client.get(f"/users/{user_id}/try-ons").json()) == 2
+    assert client.post(f"/users/{user_id}/try-ons", json={"item_ids": [1]}).status_code == 429
     assert client.delete(f"/users/{user_id}").status_code == 204
