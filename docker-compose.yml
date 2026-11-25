@@ -22,9 +22,18 @@ services:
     build: .
     image: zhibek-lite:latest
     container_name: zhibek-lite
-    env_file: .env
+    # Значения берутся из .env рядом с этим файлом, если он есть; иначе — значения после ":-".
+    # Без .env проект поднимается сразу: примерка в режиме mock, админ admin@zhibek.kz / adminpass123.
     environment:
       DATABASE_URL: postgresql+psycopg://zhibek:zhibek@db:5432/zhibek
+      LLM_MOCK: ${LLM_MOCK:-true}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BACKEND: ${GEMINI_BACKEND:-}
+      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash-image}
+      SECRET_KEY: ${SECRET_KEY:-docker-dev-secret-change-me-0000000000}
+      TOKEN_MINUTES: ${TOKEN_MINUTES:-60}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@zhibek.kz}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-adminpass123}
     ports:
       - "8090:8000"
     volumes:
