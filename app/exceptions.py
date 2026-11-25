@@ -13,6 +13,18 @@ class AppError(Exception):
         self.detail = detail
 
 
+class UnauthorizedError(AppError):
+    # 401: сервер не знает, кто ты (нет токена или он плохой)
+    status_code = 401
+    error = "unauthorized"
+
+
+class ForbiddenError(AppError):
+    # 403: сервер знает, кто ты, но это действие тебе запрещено
+    status_code = 403
+    error = "forbidden"
+
+
 class NotFoundError(AppError):
     status_code = 404
     error = "not_found"

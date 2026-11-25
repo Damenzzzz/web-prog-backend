@@ -7,7 +7,7 @@ from app.db import Base
 from app.schemas.items import Category
 from app.schemas.orders import OrderStatus
 from app.schemas.try_on import TryOnStatus
-from app.schemas.users import BodyType, Gender
+from app.schemas.users import BodyType, Gender, Role
 
 try_on_items = Table(
     "try_on_items",
@@ -50,8 +50,12 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("height_cm BETWEEN 100 AND 250", name="ck_users_height"),
         CheckConstraint("weight_kg BETWEEN 30 AND 250", name="ck_users_weight"),
+        UniqueConstraint("email", name="uq_users_email"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), default=Role.user, server_default=Role.user.value)
     name: Mapped[str] = mapped_column(String(50))
     height_cm: Mapped[int] = mapped_column(Integer)
     weight_kg: Mapped[int] = mapped_column(Integer)

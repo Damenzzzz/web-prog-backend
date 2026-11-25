@@ -24,9 +24,34 @@
   <main>
     <section class="section two-columns">
       <div>
+        <div id="login-block" class="panel" hidden>
+          <h2>Вход</h2>
+          <form id="login-form" class="form">
+            <label>Email
+              <input name="email" type="email" required autocomplete="email">
+            </label>
+            <label>Пароль
+              <input name="password" type="password" required autocomplete="current-password">
+            </label>
+            <div class="actions">
+              <button class="btn" type="submit">Войти</button>
+            </div>
+            <p id="login-message" class="message"></p>
+          </form>
+          <p class="muted">Нет аккаунта? Заполните анкету ниже — это и есть регистрация.</p>
+        </div>
+
         <h1>Анкета</h1>
-        <p class="muted">Рост, вес и тип фигуры учитываются при AI-примерке.</p>
+        <p id="account-info" class="muted">Рост, вес и тип фигуры учитываются при AI-примерке.</p>
         <form id="profile-form" class="form">
+          <div id="account-fields" hidden>
+            <label>Email
+              <input name="email" type="email" autocomplete="email">
+            </label>
+            <label>Пароль (от 8 символов)
+              <input name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password">
+            </label>
+          </div>
           <label>Имя
             <input name="name" required maxlength="50" autocomplete="given-name">
           </label>
@@ -59,6 +84,7 @@
           </label>
           <div class="actions">
             <button class="btn" type="submit">Сохранить</button>
+            <button id="logout" class="link" type="button" hidden>Выйти</button>
             <button id="profile-delete" class="link danger" type="button" hidden>Удалить анкету</button>
           </div>
           <p id="profile-message" class="message"></p>

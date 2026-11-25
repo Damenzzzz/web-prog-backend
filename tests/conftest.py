@@ -36,3 +36,41 @@ def client():
         connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     with TestClient(app) as test_client:
         yield test_client
+
+
+PROFILE = {"name": "Айгерим", "height_cm": 165, "weight_kg": 55, "gender": "female", "body_type": "slim"}
+PASSWORD = "secret123"
+
+
+def register(client, email: str) -> int:
+    response = client.post("/auth/register", json={**PROFILE, "email": email, "password": PASSWORD})
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def auth_headers(client, email: str) -> dict:
+    response = client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+def user(client) -> dict:
+    """Обычный пользователь: его id и готовый заголовок с токеном."""
+    user_id = register(client, "user@example.com")
+    return {"id": user_id, "headers": auth_headers(client, "user@example.com")}
+
+
+@pytest.fixture
+def other_user(client) -> dict:
+    user_id = register(client, "other@example.com")
+    return {"id": user_id, "headers": auth_headers(client, "other@example.com")}
+
+
+@pytest.fixture
+def admin(client) -> dict:
+    """Через API админа не создать, поэтому регистрируем обычного и меняем роль прямо в базе."""
+    user_id = register(client, "admin@example.com")
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE users SET role = 'admin' WHERE id = :id"), {"id": user_id})
+    return {"id": user_id, "headers": auth_headers(client, "admin@example.com")}

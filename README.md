@@ -30,6 +30,9 @@ uvicorn app.main:app --reload
 | `LLM_MODEL` | `gemini-2.5-flash-image` | модель, которая генерирует картинку |
 | `LLM_MOCK` | `false` | `true` — Gemini не вызывается, результатом примерки становится копия фото пользователя |
 | `DATABASE_URL` | `postgresql+psycopg://zhibek:zhibek@localhost:5433/zhibek` | строка подключения к PostgreSQL; в compose подставляется сама |
+| `SECRET_KEY` | тестовая строка | секрет для подписи JWT; в `.env` нужен свой длинный случайный (`python -c "import secrets; print(secrets.token_hex(32))"`) |
+| `TOKEN_MINUTES` | `60` | сколько минут действует токен |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | пусто | если заданы, при старте создаётся админ (через регистрацию админом стать нельзя) |
 | `GEMINI_BACKEND` | пусто | `vertex` — ключ от Vertex AI (Google Cloud): запрос идёт на `aiplatform.googleapis.com`, ключ передаётся в `?key=`; пусто — ключ Google AI Studio |
 
 Без ключа удобно проверять всё остальное с `LLM_MOCK=true`.
@@ -62,7 +65,7 @@ looks 1 ──< items >── try_on_items ──< try_ons >── 1 users
 |---|---|---|
 | `looks` | один образ → много `items` | `title` уникален |
 | `items` | `look_id` → `looks` (`ON DELETE SET NULL`) | `price > 0`, `stock >= 0`, `category` — enum |
-| `users` | один пользователь → много строк примерочной, заказов, примерок | рост 100–250, вес 30–250, `gender`/`body_type` — enum |
+| `users` | один пользователь → много строк примерочной, заказов, примерок | `email` уникален, `password_hash` (bcrypt), `role` — enum `user`/`admin`; рост 100–250, вес 30–250, `gender`/`body_type` — enum |
 | `fitting_room_rows` | `user_id` → `users` (`CASCADE`), `item_id` → `items` (`RESTRICT`) | `UNIQUE(user_id, item_id)`, `quantity >= 1` |
 | `orders` | `user_id` → `users` (`CASCADE`); один заказ → много `order_items` | `total >= 0`, `status` — enum |
 | `order_items` | `order_id` → `orders` (`CASCADE`), `item_id` → `items` (`SET NULL`) | снапшот `name` и `price` на момент заказа |
@@ -79,7 +82,9 @@ looks 1 ──< items >── try_on_items ──< try_ons >── 1 users
 Миграции лежат в `alembic/versions/`:
 
 1. `initial schema` — все таблицы, ключи, индексы и ограничения;
-2. `soft delete for try-ons` — колонка `try_ons.deleted_at`.
+2. `soft delete for try-ons` — колонка `try_ons.deleted_at`;
+3. `auth for users` — колонки `users.email` (UNIQUE), `users.password_hash`, `users.role`. Старые анкеты без email и пароля
+   удаляются (войти в них всё равно нельзя), их данные уходят по `ON DELETE CASCADE`.
 
 ```bash
 alembic upgrade head               # применить все
@@ -110,7 +115,9 @@ app/
   models.py       модели SQLAlchemy (таблицы и связи)
   storage.py      пути к файлам в static/
   seed.py         15 товаров с фотографиями и 4 образа (если база пустая)
-  exceptions.py   свои исключения (400, 404, 409, 415, 429, 502) и обработчики
+  security.py     хеширование паролей (bcrypt) и создание/проверка JWT
+  dependencies.py get_current_user, require_admin, ensure_owner_or_admin
+  exceptions.py   свои исключения (400, 401, 403, 404, 409, 415, 429, 502) и обработчики
   llm.py          один запрос к Gemini через httpx
   schemas/        Pydantic-модели запросов и ответов
   services/       вся бизнес-логика (обычные функции)
@@ -125,34 +132,39 @@ static/
 
 ## Эндпоинты
 
-| Метод | Путь | Что делает | Коды |
-|---|---|---|---|
-| GET | `/items` | Список товаров, фильтры `category`, `color`, `min_price`, `max_price`, `in_stock` | 200, 422 |
-| GET | `/items/{id}` | Один товар | 200, 404 |
-| POST | `/items` | Создать товар | 201, 404, 422 |
-| PATCH | `/items/{id}` | Изменить товар (только переданные поля) | 200, 404, 422 |
-| DELETE | `/items/{id}` | Удалить товар | 204, 404, 409 |
-| GET | `/items/{id}/matches?limit=4` | «Дополни образ» — рекомендации по правилам | 200, 404, 422 |
-| GET | `/looks` | Список образов | 200 |
-| GET | `/looks/{id}` | Образ вместе с товарами | 200, 404 |
-| GET | `/users` | Список анкет | 200 |
-| GET | `/users/{id}` | Одна анкета | 200, 404 |
-| POST | `/users` | Создать анкету | 201, 422 |
-| PATCH | `/users/{id}` | Изменить анкету | 200, 404, 422 |
-| DELETE | `/users/{id}` | Удалить анкету вместе с фото, примерочной и примерками | 204, 404, 409 |
-| POST | `/users/{id}/photo` | Загрузить фото пользователя (файл, JPEG или PNG до 5 МБ) | 200, 400, 404, 415 |
-| GET | `/users/{id}/fitting-room` | Примерочная с суммой | 200, 404 |
-| POST | `/users/{id}/fitting-room/items` | Добавить товар `{item_id, quantity}` | 201, 400, 404, 422 |
-| PATCH | `/users/{id}/fitting-room/items/{item_id}` | Изменить количество `{quantity}` | 200, 400, 404, 422 |
-| DELETE | `/users/{id}/fitting-room/items/{item_id}` | Убрать товар | 204, 404 |
-| POST | `/users/{id}/orders` | Оформить заказ из примерочной | 201, 400, 404, 409 |
-| GET | `/users/{id}/orders` | Заказы пользователя | 200, 404 |
-| GET | `/orders/{id}` | Один заказ | 200, 404 |
-| PATCH | `/orders/{id}/status` | Сменить статус `{status}` | 200, 404, 409, 422 |
-| POST | `/users/{id}/try-ons` | AI-примерка `{item_ids}` (1–3 вещи) | 201, 400, 404, 422, 429, 502 |
-| GET | `/users/{id}/try-ons` | История примерок пользователя | 200, 404 |
-| GET | `/try-ons/{id}` | Одна примерка | 200, 404 |
-| DELETE | `/try-ons/{id}` | Удалить примерку и файл результата | 204, 404 |
+Доступ: **все** — без токена; **владелец** — только сам пользователь (`{id}` в пути или владелец заказа/примерки) или админ;
+**админ** — только `role = admin`. Без токена → 401, чужой ресурс или нет прав → 403.
+
+| Метод | Путь | Что делает | Доступ | Коды |
+|---|---|---|---|---|
+| POST | `/auth/register` | Регистрация `{email, password, ...анкета}` | все | 201, 409, 422 |
+| POST | `/auth/login` | Вход `{email, password}` → `{access_token, token_type}` | все | 200, 401, 422 |
+| GET | `/auth/me` | Текущий пользователь по токену | с токеном | 200, 401 |
+| GET | `/items` | Список товаров, фильтры `category`, `color`, `min_price`, `max_price`, `in_stock` | все | 200, 422 |
+| GET | `/items/{id}` | Один товар | все | 200, 404 |
+| POST | `/items` | Создать товар | админ | 201, 401, 403, 404, 422 |
+| PATCH | `/items/{id}` | Изменить товар (только переданные поля) | админ | 200, 401, 403, 404, 422 |
+| DELETE | `/items/{id}` | Удалить товар | админ | 204, 401, 403, 404, 409 |
+| GET | `/items/{id}/matches?limit=4` | «Дополни образ» — рекомендации по правилам | все | 200, 404, 422 |
+| GET | `/looks` | Список образов | все | 200 |
+| GET | `/looks/{id}` | Образ вместе с товарами | все | 200, 404 |
+| GET | `/users` | Список анкет | админ | 200, 401, 403 |
+| GET | `/users/{id}` | Одна анкета | владелец | 200, 401, 403, 404 |
+| PATCH | `/users/{id}` | Изменить анкету | владелец | 200, 401, 403, 404, 422 |
+| DELETE | `/users/{id}` | Удалить анкету вместе с фото, примерочной и примерками | владелец | 204, 401, 403, 404, 409 |
+| POST | `/users/{id}/photo` | Загрузить фото пользователя (файл, JPEG или PNG до 5 МБ) | владелец | 200, 400, 401, 403, 404, 415 |
+| GET | `/users/{id}/fitting-room` | Примерочная с суммой | владелец | 200, 401, 403, 404 |
+| POST | `/users/{id}/fitting-room/items` | Добавить товар `{item_id, quantity}` | владелец | 201, 400, 401, 403, 404, 422 |
+| PATCH | `/users/{id}/fitting-room/items/{item_id}` | Изменить количество `{quantity}` | владелец | 200, 400, 401, 403, 404, 422 |
+| DELETE | `/users/{id}/fitting-room/items/{item_id}` | Убрать товар | владелец | 204, 401, 403, 404 |
+| POST | `/users/{id}/orders` | Оформить заказ из примерочной | владелец | 201, 400, 401, 403, 404, 409 |
+| GET | `/users/{id}/orders` | Заказы пользователя | владелец | 200, 401, 403, 404 |
+| GET | `/orders/{id}` | Один заказ | владелец | 200, 401, 403, 404 |
+| PATCH | `/orders/{id}/status` | Сменить статус `{status}`: владелец — `paid`/`cancelled`, `shipped` — только админ | владелец / админ | 200, 401, 403, 404, 409, 422 |
+| POST | `/users/{id}/try-ons` | AI-примерка `{item_ids}` (1–3 вещи) | владелец | 201, 400, 401, 403, 404, 422, 429, 502 |
+| GET | `/users/{id}/try-ons` | История примерок пользователя | владелец | 200, 401, 403, 404 |
+| GET | `/try-ons/{id}` | Одна примерка | владелец | 200, 401, 403, 404 |
+| DELETE | `/try-ons/{id}` | Удалить примерку и файл результата | владелец | 204, 401, 403, 404 |
 
 Любая ошибка возвращается в одном формате:
 
@@ -163,12 +175,28 @@ static/
 | Код | `error` | Когда |
 |---|---|---|
 | 400 | `business_rule` | нарушено бизнес-правило (нет столько на складе, примерочная пуста, нет фото для примерки) |
+| 401 | `unauthorized` | нет токена, токен подделан или просрочен, неверный email или пароль при входе |
+| 403 | `forbidden` | токен верный, но действие запрещено: чужой ресурс или нужна роль админа |
 | 404 | `not_found` | объекта с таким id нет |
 | 409 | `conflict` | действие противоречит текущему состоянию (товар в примерочной, недопустимый статус) |
 | 415 | `unsupported_media_type` | загружен файл не JPEG и не PNG |
 | 422 | `validation_error` | Pydantic не принял входные данные |
 | 429 | `too_many_requests` | исчерпан дневной лимит примерок |
 | 502 | `bad_gateway` | Gemini недоступна или не вернула картинку |
+
+## Регистрация, вход и права
+
+1. `POST /auth/register` — Pydantic проверяет email и пароль (8–72 символа), занятый email → 409.
+   Пароль сохраняется только как bcrypt-хеш. Роль всегда `user`.
+2. `POST /auth/login` — проверяем email и пароль, на любую ошибку один ответ 401 `Invalid email or password`.
+   В ответ JWT: `{"sub": "<id>", "exp": <через 60 минут>}`, подписан `SECRET_KEY` (HS256).
+3. Дальше клиент шлёт заголовок `Authorization: Bearer <token>`. Зависимость `get_current_user`
+   проверяет подпись и срок и достаёт пользователя из базы. Иначе 401.
+4. Права: `require_admin` — для каталога и списка пользователей; `ensure_owner_or_admin` — для личных данных.
+   Иначе 403.
+
+В Swagger: вызвать `/auth/login`, скопировать `access_token`, нажать **Authorize** и вставить токен.
+Выход — фронт просто удаляет токен (JWT нигде на сервере не хранится).
 
 ## Четыре workflow
 
@@ -223,6 +251,9 @@ Gemini получает фото пользователя и фото выбра
 
 Откройте `/docs` на чистой базе (`docker compose down -v && docker compose up -d --build`) и идите сверху вниз. Прочерк значит, что в этом workflow такого правила нет.
 
+Перед проверками зарегистрируйтесь, войдите через `/auth/login` и вставьте токен в **Authorize**. Для `POST/PATCH/DELETE /items`
+и `shipped` нужен админ: задайте `ADMIN_EMAIL` и `ADMIN_PASSWORD` в `.env` и войдите под ним.
+
 ### Workflow 1. Каталог
 
 | Проверка | Запрос | Ожидаем |
@@ -239,9 +270,12 @@ Gemini получает фото пользователя и фото выбра
 
 | Проверка | Запрос | Ожидаем |
 |---|---|---|
-| Успех | `POST /users` `{"name":"Айгерим","height_cm":168,"weight_kg":58,"gender":"female","body_type":"slim"}` | 201, `id: 1`, `photo_url: null` |
+| Успех | `POST /auth/register` `{"email":"aigerim@example.com","password":"secret123","name":"Айгерим","height_cm":168,"weight_kg":58,"gender":"female","body_type":"slim"}` | 201, `role: user`, `photo_url: null` |
 | Успех | `PATCH /users/1` `{"weight_kg": 59}` | 200, остальные поля не изменились |
-| 422 | `POST /users` с `"height_cm": 50` | 422 `validation_error` |
+| 422 | `POST /auth/register` с `"height_cm": 50` или `"password": "123"` | 422 `validation_error` |
+| 409 | повторный `POST /auth/register` с тем же email | 409 `conflict` |
+| 401 | `POST /auth/login` с неверным паролем; любой запрос владельца без токена | 401 `unauthorized` |
+| 403 | `GET /users/2` с токеном пользователя 1; `POST /items` с токеном не-админа | 403 `forbidden` |
 | 404 | `GET /users/999` | 404 `not_found` |
 | 409 | `DELETE /users/1`, пока у пользователя есть заказ `pending` (после workflow 3) | 409 `conflict` |
 | 400 | — | |

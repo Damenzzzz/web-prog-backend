@@ -15,14 +15,17 @@ const STATUS_NAMES = {
 };
 
 async function api(method, path, body) {
-  const options = { method };
+  const options = { method, headers: {} };
+  const token = localStorage.getItem("token");
+  if (token) options.headers.Authorization = `Bearer ${token}`;
   if (body instanceof FormData) {
     options.body = body;
   } else if (body !== undefined) {
-    options.headers = { "Content-Type": "application/json" };
+    options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
   }
   const response = await fetch(path, options);
+  if (response.status === 401) clearSession();
   if (response.status === 204) return null;
   const data = await response.json();
   if (!response.ok) {
@@ -33,8 +36,24 @@ async function api(method, path, body) {
   return data;
 }
 
+async function login(email, password) {
+  const { access_token } = await api("POST", "/auth/login", { email, password });
+  localStorage.setItem("token", access_token);
+  const me = await api("GET", "/auth/me");
+  localStorage.setItem("user_id", me.id);
+  localStorage.setItem("role", me.role);
+}
+
+function clearSession() {
+  ["token", "user_id", "role"].forEach((key) => localStorage.removeItem(key));
+}
+
 function getUserId() {
-  return localStorage.getItem("user_id");
+  return localStorage.getItem("token") ? localStorage.getItem("user_id") : null;
+}
+
+function isAdmin() {
+  return localStorage.getItem("role") === "admin";
 }
 
 function money(amount) {
@@ -91,13 +110,13 @@ async function updateRoomCount() {
     badge.textContent = room.items.length;
     badge.hidden = room.items.length === 0;
   } catch (error) {
-    if (error.status === 404) localStorage.removeItem("user_id");
+    if (error.status === 404) clearSession();
   }
 }
 
 async function addToRoom(itemId) {
   if (!getUserId()) {
-    showToast("Сначала заполните анкету в профиле", true);
+    showToast("Сначала войдите или зарегистрируйтесь в профиле", true);
     return;
   }
   try {
@@ -204,6 +223,9 @@ async function initProfile() {
     preview.hidden = false;
   }
 
+  const loginForm = document.getElementById("login-form");
+  const logoutButton = document.getElementById("logout");
+
   if (getUserId()) {
     try {
       const user = await api("GET", `/users/${getUserId()}`);
@@ -211,11 +233,34 @@ async function initProfile() {
         if (form.elements[key]) form.elements[key].value = value ?? "";
       }
       if (user.photo_url) showPhoto(user.photo_url);
+      const role = user.role === "admin" ? " (администратор)" : "";
+      document.getElementById("account-info").textContent = `Вы вошли как ${user.email}${role}.`;
       deleteButton.hidden = false;
+      logoutButton.hidden = false;
     } catch (error) {
       setMessage(message, error.message, true);
     }
+  } else {
+    document.getElementById("login-block").hidden = false;
+    document.getElementById("account-fields").hidden = false;
+    form.elements.email.required = true;
+    form.elements.password.required = true;
   }
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await login(loginForm.elements.email.value.trim(), loginForm.elements.password.value);
+      location.reload();
+    } catch (error) {
+      setMessage(document.getElementById("login-message"), error.message, true);
+    }
+  });
+
+  logoutButton.addEventListener("click", () => {
+    clearSession();
+    location.reload();
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -228,12 +273,16 @@ async function initProfile() {
       style_preference: form.elements.style_preference.value.trim(),
     };
     try {
-      const user = getUserId()
-        ? await api("PATCH", `/users/${getUserId()}`, data)
-        : await api("POST", "/users", data);
-      localStorage.setItem("user_id", user.id);
-      deleteButton.hidden = false;
-      setMessage(message, "Анкета сохранена");
+      if (getUserId()) {
+        await api("PATCH", `/users/${getUserId()}`, data);
+        setMessage(message, "Анкета сохранена");
+      } else {
+        const email = form.elements.email.value.trim();
+        const password = form.elements.password.value;
+        await api("POST", "/auth/register", { ...data, email, password });
+        await login(email, password);
+        location.reload();
+      }
     } catch (error) {
       setMessage(message, error.message, true);
     }
@@ -243,14 +292,8 @@ async function initProfile() {
     if (!confirm("Удалить анкету вместе с фото, примерочной и примерками?")) return;
     try {
       await api("DELETE", `/users/${getUserId()}`);
-      localStorage.removeItem("user_id");
-      form.reset();
-      photoForm.reset();
-      preview.hidden = true;
-      deleteButton.hidden = true;
-      setMessage(message, "Анкета удалена");
-      setMessage(photoMessage, "");
-      updateRoomCount();
+      clearSession();
+      location.reload();
     } catch (error) {
       setMessage(message, error.message, true);
     }
@@ -265,7 +308,7 @@ async function initProfile() {
   photoForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!getUserId()) {
-      setMessage(photoMessage, "Сначала сохраните анкету", true);
+      setMessage(photoMessage, "Сначала войдите или зарегистрируйтесь", true);
       return;
     }
     const data = new FormData();
@@ -311,7 +354,10 @@ function orderCard(order) {
 
   let buttons = "";
   if (order.status === "pending") buttons = button("paid", "Оплатить") + button("cancelled", "Отменить", "ghost");
-  if (order.status === "paid") buttons = button("shipped", "Отправить") + button("cancelled", "Отменить", "ghost");
+  if (order.status === "paid") {
+    // «Отправить» может только админ, обычному пользователю кнопку не показываем
+    buttons = (isAdmin() ? button("shipped", "Отправить") : "") + button("cancelled", "Отменить", "ghost");
+  }
 
   return `
     <div class="order">
@@ -382,7 +428,7 @@ async function initRoom() {
   const tryOnsMessage = document.getElementById("tryons-message");
 
   if (!getUserId()) {
-    roomMessage.innerHTML = 'Чтобы пользоваться примерочной, заполните <a href="profile.html">анкету</a>.';
+    roomMessage.innerHTML = 'Чтобы пользоваться примерочной, <a href="profile.html">войдите или зарегистрируйтесь</a>.';
     return;
   }
 

@@ -1,8 +1,12 @@
+import os
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Item, Look
+from app.models import Item, Look, User
 from app.schemas.items import Category
+from app.schemas.users import BodyType, Gender, Role
+from app.security import hash_password
 
 LOOKS = [
     "Офисная классика",
@@ -37,4 +41,25 @@ def load_seed(db: Session) -> None:
     db.add_all(looks)
     for name, category, color, price, stock, look_number, photo in ITEMS:
         db.add(Item(name=name, category=category, color=color, price=price, stock=stock, look=looks[look_number - 1], image_url=f"/catalog/{photo}"))
+    db.commit()
+
+
+def create_admin(db: Session) -> None:
+    """Админа нельзя создать через регистрацию: он берётся из ADMIN_EMAIL и ADMIN_PASSWORD в .env."""
+    email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    password = os.getenv("ADMIN_PASSWORD", "")
+    if not email or not password:
+        return
+    if db.scalar(select(User.id).where(User.email == email)) is not None:
+        return
+    db.add(User(
+        email=email,
+        password_hash=hash_password(password),
+        role=Role.admin,
+        name="Admin",
+        height_cm=170,
+        weight_kg=70,
+        gender=Gender.female,
+        body_type=BodyType.average,
+    ))
     db.commit()

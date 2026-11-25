@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.dependencies import require_admin
+from app.models import User
 from app.schemas.items import Category, ItemCreate, ItemOut, ItemUpdate, LookDetail, LookOut
 from app.services import items as items_service
 
@@ -26,17 +28,17 @@ def get_item(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/items", response_model=ItemOut, status_code=201)
-def create_item(data: ItemCreate, db: Session = Depends(get_db)):
+def create_item(data: ItemCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     return items_service.create_item(db, data)
 
 
 @router.patch("/items/{item_id}", response_model=ItemOut)
-def update_item(item_id: int, data: ItemUpdate, db: Session = Depends(get_db)):
+def update_item(item_id: int, data: ItemUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     return items_service.update_item(db, item_id, data)
 
 
 @router.delete("/items/{item_id}", status_code=204)
-def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
+def delete_item(item_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)) -> None:
     items_service.delete_item(db, item_id)
 
 

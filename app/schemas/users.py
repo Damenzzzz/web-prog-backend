@@ -15,6 +15,11 @@ class BodyType(StrEnum):
     plus = "plus"
 
 
+class Role(StrEnum):
+    user = "user"
+    admin = "admin"
+
+
 class UserCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     height_cm: int = Field(ge=100, le=250)
@@ -36,4 +41,6 @@ class UserUpdate(BaseModel):
 class UserOut(UserCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    email: str
+    role: Role
     photo_url: str | None = None

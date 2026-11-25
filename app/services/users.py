@@ -5,7 +5,7 @@ from app import storage
 from app.exceptions import BusinessRuleError, ConflictError, NotFoundError, UnsupportedMediaError
 from app.models import Order, User
 from app.schemas.orders import OrderStatus
-from app.schemas.users import UserCreate, UserUpdate
+from app.schemas.users import UserUpdate
 
 ACTIVE_STATUSES = [OrderStatus.pending, OrderStatus.paid]
 
@@ -20,13 +20,6 @@ def get_user(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError(f"User {user_id} not found")
-    return user
-
-
-def create_user(db: Session, data: UserCreate) -> User:
-    user = User(**data.model_dump())
-    db.add(user)
-    db.commit()
     return user
 
 
