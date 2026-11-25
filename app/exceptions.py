@@ -60,7 +60,11 @@ def error_response(status_code: int, error: str, detail: str) -> JSONResponse:
 
 
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
-    return error_response(exc.status_code, exc.error, exc.detail)
+    response = error_response(exc.status_code, exc.error, exc.detail)
+    if exc.status_code == 401:
+        # по стандарту HTTP ответ 401 говорит, каким способом входить
+        response.headers["WWW-Authenticate"] = "Bearer"
+    return response
 
 
 async def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

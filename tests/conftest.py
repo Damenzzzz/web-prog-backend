@@ -2,6 +2,7 @@ import os
 
 os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "postgresql+psycopg://zhibek:zhibek@localhost:5433/zhibek_test")
 os.environ["LLM_MOCK"] = "true"
+os.environ["ADMIN_EMAIL"] = ""  # админа из .env в тестах не создаём, тесты делают своего
 
 import pytest
 from alembic.config import Config

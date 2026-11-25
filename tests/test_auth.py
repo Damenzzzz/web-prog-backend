@@ -168,3 +168,30 @@ def test_order_status_rules_by_role(client, user, admin):
     # отправляет заказ только магазин
     assert client.patch(f"/orders/{order_id}/status", json={"status": "shipped"}, headers=h).status_code == 403
     assert client.patch(f"/orders/{order_id}/status", json={"status": "shipped"}, headers=admin["headers"]).status_code == 200
+
+
+# ---------- найдено при осмотре ----------
+
+def test_cyrillic_password_and_byte_limit(client):
+    # 36 букв кириллицы = 72 байта — ровно предел bcrypt, должно работать
+    cyrillic = "пароль" * 6
+    assert client.post("/auth/register", json={**NEW, "password": cyrillic}).status_code == 201
+    assert client.post("/auth/login", json={"email": NEW["email"], "password": cyrillic}).status_code == 200
+    # 42 буквы = 84 байта: раньше был 500, теперь понятная 422
+    too_long = {**NEW, "email": "long@example.com", "password": "пароль" * 7}
+    assert client.post("/auth/register", json=too_long).status_code == 422
+    # длинный пароль при входе — просто неверный пароль, а не 500
+    assert client.post("/auth/login", json={"email": NEW["email"], "password": "я" * 50}).status_code == 401
+
+
+def test_token_without_expiration_is_rejected(client, user):
+    no_exp = jwt.encode({"sub": str(user["id"])}, SECRET_KEY, ALGORITHM)
+    no_sub = jwt.encode({"exp": datetime.now(timezone.utc) + timedelta(minutes=5)}, SECRET_KEY, ALGORITHM)
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {no_exp}"}).status_code == 401
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {no_sub}"}).status_code == 401
+
+
+def test_401_says_how_to_authenticate(client):
+    response = client.get("/auth/me")
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
